@@ -1,0 +1,132 @@
+---
+title: "microbialARC Bioinformatic Report"
+author: ""
+date: \ today
+output: pdf_document
+---
+
+```{r child = 'microbialARC_preamble.Rmd'}
+```
+
+# Taxonomic Assignments per Collection
+
+### Taxonomic Assignments were performed using Sylph. Summary metric is determined by CheckM statistcs. Passing is defined by greater than or equal to 95% completeness and less than or equal to 5% contamination. 
+```{r,  fig.width=10, fig.height=8}
+ggplot(df, aes(x = `sample species`, fill = Summary_Metric)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(title = "Summary of Taxonomic Assignments per Collection",
+       x = "Species",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~ Collection, scales = "free_x")
+```
+# Evaluating Quality of Assembled Genomes with CheckM
+
+Assembly QC was performed with CheckM. The plot below summarizes the distribution of completeness and contamination.
+
+```{r,  fig.width=10, fig.height=8}
+ggplot(df, aes(x = Contamination, y = Completeness, color = Summary_Metric)) +
+  geom_point(size = 1.5, alpha = 0.8) +
+  geom_vline(xintercept = 5, linetype = "dotted", color = "black") +
+  geom_hline(yintercept = 95, linetype = "dotted", color = "black") +
+  facet_wrap(~ Collection) +
+  theme_minimal() +
+  labs(
+    title = "Contamination vs. Completeness by Collection",
+    x = "Contamination (%)",
+    y = "Completeness (%)",
+    color = "Summary Metric"
+  ) + facet_wrap(~ Collection, scales = "free_x")
+```
+
+# The following samples failed assembly. 
+```{r}
+failed_assembly <- df %>% 
+  filter(df$Summary_Metric == 'Failed Assembly') %>%
+  select(
+    'Sample' = Sample,
+    'Genome Size' = Genome_Size,
+    'Expected Species' = `sample species`,
+    'Specimen Barcode' = `Specimen Barcode`,
+    'Collection' = Collection, 
+    'Read Count' = Read_Count
+  ) %>%
+  pander(split.table = Inf)
+  
+```
+# The following samples are contaminated as determined by CheckM Contamination and Mash. 
+
+```{r}
+contaminated <- df %>% 
+  filter(df$Summary_Metric == 'Contaminated') %>%
+  select(
+    'Sample' = Sample,
+    'Genome Size' = Genome_Size,
+    'GC Content' = GC_Content,
+    'Expected Species' = `sample species`,
+    'CheckM Contamination' = Contamination,
+    'Mash Contamination' = Mash_Contamination,
+    'Specimen Barcode' = `Specimen Barcode`,
+    'Collection' = Collection, 
+    'Read Count' = Read_Count
+  ) %>%
+  pander(split.table = Inf)
+
+```
+# The distribution of sequence types, as determined by MLST, for the top 5 species. 
+```{r, fig.width=10, fig.height=8}
+top_species_per_collection <- df %>%
+  group_by(Collection, `sample species`) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(Collection) %>%
+  slice_max(order_by = n, n = 5, with_ties = FALSE)  # Pick top 5 species per collection
+
+df_top_species <- df %>%
+  inner_join(top_species_per_collection, by = c("Collection", "sample species")) %>%
+  mutate(ST = as.factor(ST))
+
+ggplot(df_top_species, aes(x = ST, fill = Collection)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ `sample species`, scales = "free_x") +
+  theme_minimal() +
+  labs(
+    title = "ST Distribution for Top 5 Species per Collection",
+    x = "Sequence Type (ST)",
+    y = "Count",
+    fill = "Collection"
+  ) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+# Average Contig Coverage Per Sample 
+
+### The plot below shows the average coverage per contig per sample as calculated by Shovill. 
+```{r}
+df$Avg_Contig_Coverage = as.numeric(df$Avg_Contig_Coverage)
+ggplot(df, aes(x = reorder(Sample, Avg_Contig_Coverage), y = Avg_Contig_Coverage)) +
+  geom_col() +
+  theme_minimal() +
+  labs(
+    title = "Average Contig Coverage per Sample",
+    x = NULL,
+    y = "Average Contig Coverage"
+  ) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+```
+
+# Read Count Information 
+
+```{r reads_histogram, echo=FALSE, fig.width=6, fig.height=6}
+df$Read_Count = as.numeric(df$Read_Count)
+ggplot(df, aes(x = reorder(Sample, Read_Count), y = Read_Count, fill = Collection)) +
+  geom_col() +
+  theme_minimal() +
+  labs(
+    title = "Number of Reads per Sample",
+    x = NULL,
+    y = "Number of Reads"
+  ) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```

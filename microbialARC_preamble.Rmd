@@ -1,0 +1,73 @@
+```{r, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(tidyverse)
+library(pander)
+library(kableExtra)
+library(RColorBrewer)
+library(viridis)
+library(ggplot2)
+library(readxl)
+library(here)
+library(gridExtra)
+```
+
+```{r}
+
+### Sbx_sga final summary
+sga_report_fp <- here("Data", "final_summary.tsv")
+
+### Load lab metadata 
+lab_metadata <- here("Data", "microbialARC_metadata_sheet_uploaded_AM_05242024_pass.xlsx")
+
+### Load clinical data 
+
+### Load transmission cluster data 
+
+### Load taxonomic data 
+taxonomic_data <- here("Data", "sylph_summary.tsv")
+```
+
+```{r}
+bfx_df <- read_delim(sga_report_fp, delim = ',')
+
+bacteremia_lab <- read_excel(lab_metadata, sheet = 1)
+
+nicu_lab <- read_excel(lab_metadata, sheet = 4)
+nicu_lab$`Received by mARC` <- as.POSIXct(nicu_lab$`Received by mARC`, format = "%Y-%m-%d %H:%M:%S")
+
+lab_df <- bind_rows(bacteremia_lab, nicu_lab)
+
+taxonomic_df <- read_delim(taxonomic_data, delim="\t")
+colnames(taxonomic_df) <- c('Sample', 'Species')
+```
+
+```{r}
+df <- inner_join(bfx_df, lab_df, by = c("Sample" = "Sample ID")) %>%
+  mutate(
+    Contamination = as.numeric(Contamination),
+    Completeness = as.numeric(Completeness)
+  ) %>%
+  mutate(
+    Sample = as.character(Sample),
+    Summary_Metric = case_when(
+      Contamination == '-' | Completeness == '-' ~ "Failed Assembly",
+      Contamination > 5 ~ "Contaminated",
+      Contamination <= 5 & Completeness >= 95 ~ "Passing",
+      TRUE ~ NA_character_
+    ),
+    Collection = case_when(
+      str_detect(Sample, "bacteremia") ~ "Bacteremia",
+      str_detect(Sample, "NIICU") ~ "NICU",
+      TRUE ~ "NA"
+    )
+  )
+```
+
+```{r}
+ctrl_regex <- "^EBneg.*|^Extract.*|^Vibriolambda.*|^Blank.*|^mockdna.*|^DNAfreewater.*|^Geneblock.*|^Emptywell"
+
+df_controls <- bfx_df %>%
+  filter(str_detect(Sample, ctrl_regex))
+
+```
